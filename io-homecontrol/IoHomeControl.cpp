@@ -995,6 +995,10 @@ namespace iohome
       device.position = UNKNOWN_POSITION;
       device.target = UNKNOWN_POSITION;
       device.tilt = UNKNOWN_POSITION;
+      // Default to low power (long preamble), consistent with DeviceStorage and the
+      // info-request fallback for unknown devices. Without it, actuators such as the
+      // Somfy J406 io miss the 0x3D challenge response and never answer 0x00/0x03.
+      device.info.is_low_power = true;
       HexStringToBuff(deviceID, device.info.node_id, NODE_ID_SIZE);
       sDeviceMap.insert({deviceID, device});
     }
