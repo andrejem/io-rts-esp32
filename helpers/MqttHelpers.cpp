@@ -1707,6 +1707,14 @@ namespace Helpers
                 // until it reaches an end stop): publish "stopped", otherwise HA keeps a stale "opening"/"closing".
                 if (deviceCopy.is_stopped && deviceCopy.info.protocol_mode == iohome::ProtocolMode::PROTO_2W)
                     esp_mqtt_client_publish(mMqttClientHandle, stateTopic.c_str(), "stopped", 0, 0, 1);
+                // The tilt can be known even if the position is not (e.g. a Somfy J406 io at its "my" position
+                // reports a marker as position but a valid tilt): publish it anyway
+                if (iohome::deviceTypeSupportsTilt(deviceCopy.info.device_type) && deviceCopy.tilt != UNKNOWN_POSITION)
+                {
+                    std::string tiltTopic = GetTopicPrefix() + "/" + MQTT_CLIENT_PREFIX_IO + deviceId + MQTT_CLIENT_TILT_TOPIC;
+                    data = std::to_string((int)deviceCopy.tilt);
+                    esp_mqtt_client_publish(mMqttClientHandle, tiltTopic.c_str(), data.c_str(), 0, 0, 1);
+                }
             }
             // publish transit time (0 = uncalibrated, published as empty to avoid HA showing 0)
             {
