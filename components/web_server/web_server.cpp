@@ -115,6 +115,9 @@ static int web_log_vprintf(const char *fmt, va_list args)
         int len = (int)strlen(line);
         while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
             line[--len] = '\0';
+        // Do not forward the HTTP server's own "queue full" warning: forwarding it queues more
+        // WebSocket work, which fills the queue again and creates a self-sustaining log storm
+        if (strstr(line, "httpd_queue_work") != nullptr) { va_end(copy); return ret; }
         if (len > 0 && xQueueSend(s_log_queue, line, 0) != pdTRUE)
             s_log_drop_count++;
     }
@@ -129,6 +132,9 @@ static void log_drain_task(void *)
         if (xQueueReceive(s_log_queue, line, portMAX_DELAY) == pdTRUE) {
             web_server_broadcast_log(line);
             syslog_send(line);
+            // Give the HTTP server task a chance to send queued frames before the next line,
+            // so bursts of radio log lines do not overflow its work queue
+            vTaskDelay(1);
         }
     }
 }
