@@ -1703,6 +1703,10 @@ namespace Helpers
             {
                 // Skip state topic — publishing "open" by default causes stale retained state in HA for 1W devices that never report position.
                 esp_mqtt_client_publish(mMqttClientHandle, positionTopic.c_str(), "None", 0, 0, 1);
+                // A 2W device that reports it is not moving but has no valid position (e.g. after a power cut,
+                // until it reaches an end stop): publish "stopped", otherwise HA keeps a stale "opening"/"closing".
+                if (deviceCopy.is_stopped && deviceCopy.info.protocol_mode == iohome::ProtocolMode::PROTO_2W)
+                    esp_mqtt_client_publish(mMqttClientHandle, stateTopic.c_str(), "stopped", 0, 0, 1);
             }
             // publish transit time (0 = uncalibrated, published as empty to avoid HA showing 0)
             {
