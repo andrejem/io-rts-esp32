@@ -951,6 +951,20 @@ namespace iohome
                 {
                   dev->second.consecutive_poll_failures = 0;
                   UpdateDeviceStatus(response);
+                  // Tilt reported as a marker (e.g. 0xD800 at the "my" position): ask again with the
+                  // 03 20 00 00 variant, which returns the actual tilt value
+                  if (deviceTypeSupportsTilt(dev->second.info.device_type) && response.data_len >= 16 &&
+                      (uint16_t)(response.data[13] << 8 | response.data[14]) > CMD_PARAM_STATUS_POS_MAX)
+                  {
+                    IoFrame tiltRequest;
+                    IoFrame tiltResponse;
+                    vTaskPrioritySet(NULL, IO_FRAME_PROCESSING_TASK);
+                    bool tiltOk = create_getstatus03_current_tilt_request(tiltRequest, mOwnNodeId, dev->second.info.node_id, dev->second.info.is_low_power) &&
+                                  SendAndReceive(tiltRequest, tiltResponse, FREQUENCY_CHANNEL_2);
+                    vTaskPrioritySet(NULL, currentPriority);
+                    if (tiltOk)
+                      UpdateDeviceStatus(tiltResponse);
+                  }
                 }
                 else
                 {

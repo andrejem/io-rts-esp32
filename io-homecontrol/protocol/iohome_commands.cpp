@@ -131,6 +131,19 @@ namespace iohome
         return set_command(frame, CMD_PRIVATE, data, 4);
     }
 
+    bool create_getstatus03_current_tilt_request(IoFrame &frame, const uint8_t *own_node_id, const uint8_t *dst_node_id, bool is_low_power)
+    {
+        init_frame(frame, true, true, false, is_low_power);
+        set_destination(frame, dst_node_id);
+        set_source(frame, own_node_id);
+
+        // Set data: 03 20 00 00 - also sent by the Connectivity Kit, returns the tilt value
+        // even when 03 20 01 00 only returns a marker (e.g. 0xD800 at the "my" position)
+        uint8_t data[4] = {0x03, 0x20, 0x00, 0x00};
+
+        return set_command(frame, CMD_PRIVATE, data, 4);
+    }
+
     bool create_discovery_request(IoFrame &frame, const uint8_t *own_node_id)
     {
         // Initialize frame for broadcast
