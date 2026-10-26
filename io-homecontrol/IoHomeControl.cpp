@@ -52,6 +52,7 @@ constexpr int64_t STATUS_UPDATE_BACKOFF_2_US = 300'000'000LL;    // 5 min  (2 co
 constexpr int64_t STATUS_UPDATE_BACKOFF_3_US = 1'800'000'000LL;  // 30 min (3 consecutive failures)
 // 4+ consecutive failures reuse STATUS_UPDATE_MAX_TIME_US (1 hour)
 constexpr int64_t STATUS_UPDATE_AFTER_REMOTE_US = 2000000;  // 2 seconds after detection of a frame sent by a remote
+constexpr int64_t STATUS_UPDATE_AFTER_TILT_US = 4000000;    // 4 seconds after a tilt command, to read back the new tilt
 constexpr int64_t STATUS_POLL_HOLD_MAX_US = 60'000'000LL;   // HoldStatusPolls() stops deferring polls after 60 s
 
 constexpr size_t LOG_MESSAGE_MAXSIZE = 256;
@@ -1714,6 +1715,9 @@ namespace iohome
       if (create_execute_tilt_request(request, mOwnNodeId, it->second.info.node_id, it->second.info.is_low_power, tilt) && SendAndReceive(request, response, FREQUENCY_CHANNEL_2))
       {
         UpdateDeviceStatus(response);
+        // The execute response has no tilt value and may still report "moving":
+        // read the status back shortly, otherwise the new tilt is only seen at the next periodic poll
+        it->second.next_status_update_timestamp = esp_timer_get_time() + STATUS_UPDATE_AFTER_TILT_US;
         ret = true;
       }
       else
@@ -2252,6 +2256,14 @@ namespace iohome
     }
   }
 
+  /// @brief true if a raw target value is a marker that leaves the height unchanged (D2 stop, D4 keep/ignore)
+  static bool isHeightKeepingMarker(uint16_t rawTarget)
+  {
+    const uint8_t marker = rawTarget >> 8;
+    return rawTarget > CMD_PARAM_STATUS_POS_MAX &&
+           (marker == CMD_PARAM_POSITION_STOP || marker == CMD_PARAM_POSITION_UNKNOWN);
+  }
+
   void IoHomeControl::UpdateDeviceStatus(const IoFrame &statusFrame)
   {
     std::string srcDevice = buffToHexString(NODE_ID_SIZE, statusFrame.src_node);
@@ -2342,10 +2354,14 @@ namespace iohome
         // [4-5] current position, [6-7] timer/unknown, [8-10] originator, [11] 01
         uint16_t tmpTargetPos = statusFrame.data[2] << 8 | statusFrame.data[3];
         uint16_t tmpCurrentPos = statusFrame.data[4] << 8 | statusFrame.data[5];
+        // D2 (stop) and D4 (keep position, e.g. tilt-only command) do not change the height
+        const bool heightUnchanged = isHeightKeepingMarker(tmpTargetPos);
         if (tmpTargetPos <= CMD_PARAM_STATUS_POS_MAX)
           deviceIt->second.target = tmpTargetPos * 100.0 / CMD_PARAM_STATUS_POS_MAX;
-        else if (deviceIt->second.is_stopped && tmpCurrentPos <= CMD_PARAM_STATUS_POS_MAX)
+        else if ((deviceIt->second.is_stopped || heightUnchanged) && tmpCurrentPos <= CMD_PARAM_STATUS_POS_MAX)
           deviceIt->second.target = tmpCurrentPos * 100.0 / CMD_PARAM_STATUS_POS_MAX; // Marker value (D2/D4), use current as target
+        else if (heightUnchanged && deviceIt->second.position != UNKNOWN_POSITION)
+          deviceIt->second.target = deviceIt->second.position; // Marker value, height stays where it was
         else
           deviceIt->second.target = UNKNOWN_POSITION;
         if (tmpCurrentPos <= CMD_PARAM_STATUS_POS_MAX)
@@ -2357,8 +2373,9 @@ namespace iohome
           {
             if (tmpTargetPos <= CMD_PARAM_STATUS_POS_MAX)
               deviceIt->second.position = deviceIt->second.target;
-            else
+            else if (!heightUnchanged)
               deviceIt->second.position = UNKNOWN_POSITION;
+            // else: marker value without a valid current position, keep the last known position
           }
         }
         if (deviceIt->second.is_stopped &&
@@ -2428,8 +2445,14 @@ namespace iohome
           deviceIt->second.move_start_us = 0; // movement complete, stop interpolation
         uint16_t tmpTargetPos = statusFrame.data[5] << 8 | statusFrame.data[6];
         uint16_t tmpCurrentPos = statusFrame.data[7] << 8 | statusFrame.data[8];
+        // D2 (stop) and D4 (keep position, e.g. tilt-only command) do not change the height
+        const bool heightUnchanged = isHeightKeepingMarker(tmpTargetPos);
         if (tmpTargetPos <= CMD_PARAM_STATUS_POS_MAX)
           deviceIt->second.target = tmpTargetPos * 100.0 / CMD_PARAM_STATUS_POS_MAX;
+        else if (heightUnchanged && tmpCurrentPos <= CMD_PARAM_STATUS_POS_MAX)
+          deviceIt->second.target = tmpCurrentPos * 100.0 / CMD_PARAM_STATUS_POS_MAX;
+        else if (heightUnchanged && deviceIt->second.position != UNKNOWN_POSITION)
+          deviceIt->second.target = deviceIt->second.position;
         else
           deviceIt->second.target = UNKNOWN_POSITION; // No clue...
         if (tmpCurrentPos <= CMD_PARAM_STATUS_POS_MAX)
@@ -2442,8 +2465,9 @@ namespace iohome
             // let's use target position (if valid) as we have reached it
             if (tmpTargetPos <= CMD_PARAM_STATUS_POS_MAX)
               deviceIt->second.position = deviceIt->second.target;
-            else
+            else if (!heightUnchanged)
               deviceIt->second.position = UNKNOWN_POSITION; // No clue...
+            // else: marker value without a valid current position, keep the last known position
           }
           // else: we will see when target will be reached. Keep current value for now!
         }

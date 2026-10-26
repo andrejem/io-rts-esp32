@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cinttypes>
+#include <cmath>
 #include <deque>
 #include <vector>
 
@@ -1652,7 +1653,11 @@ namespace Helpers
                 data = std::to_string((int)deviceCopy.position);
                 esp_mqtt_client_publish(mMqttClientHandle, positionTopic.c_str(), data.c_str(), 0, 0, 1);
                 // send state
-                if (deviceCopy.is_stopped)
+                // A device reported as moving whose target equals its position only moves its slats
+                // (tilt-only command): the height does not change, so do not report opening/closing.
+                const bool tiltOnlyMove = !deviceCopy.is_stopped && deviceCopy.target != UNKNOWN_POSITION &&
+                                          std::abs(deviceCopy.position - deviceCopy.target) < 0.5f;
+                if (deviceCopy.is_stopped || tiltOnlyMove)
                 {
                     if (deviceCopy.info.is_openclose_inverted)
                     {
