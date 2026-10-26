@@ -53,6 +53,7 @@ constexpr int64_t STATUS_UPDATE_BACKOFF_3_US = 1'800'000'000LL;  // 30 min (3 co
 // 4+ consecutive failures reuse STATUS_UPDATE_MAX_TIME_US (1 hour)
 constexpr int64_t STATUS_UPDATE_AFTER_REMOTE_US = 2000000;  // 2 seconds after detection of a frame sent by a remote
 constexpr int64_t STATUS_UPDATE_AFTER_TILT_US = 4000000;    // 4 seconds after a tilt command, to read back the new tilt
+constexpr int64_t STATUS_UPDATE_WHILE_MOVING_US = 3000000;  // 3 seconds between polls of a moving device that gives no time estimate
 constexpr int64_t STATUS_POLL_HOLD_MAX_US = 60'000'000LL;   // HoldStatusPolls() stops deferring polls after 60 s
 
 constexpr size_t LOG_MESSAGE_MAXSIZE = 256;
@@ -2446,7 +2447,14 @@ namespace iohome
               deviceIt->second.next_status_update_timestamp = esp_timer_get_time() + std::max(static_cast<int64_t>(statusFrame.data[7]) * 1000000, STATUS_UPDATE_MANUAL_MARGIN_US);
             }
             else
-              deviceIt->second.next_status_update_timestamp = esp_timer_get_time() + STATUS_UPDATE_AUTO_MARGIN_US;
+            {
+              // No automatic update and no estimate: if the device itself reports it is moving, poll again shortly
+              // until it has stopped, otherwise the final position (e.g. after a move started by a remote) is only
+              // seen after 60 s. Keep the long interval when we only assume movement (unknown target/position).
+              const bool reportedMoving = !(statusFrame.data[0] & CMD_PARAM_STATUS_STOPPED);
+              deviceIt->second.next_status_update_timestamp = esp_timer_get_time() +
+                  (reportedMoving ? STATUS_UPDATE_WHILE_MOVING_US : STATUS_UPDATE_AUTO_MARGIN_US);
+            }
           }
         }
         if (!xQueueSendToBack(sIoDeviceStatusQueue, &deviceIt->second, 0))
@@ -2519,7 +2527,14 @@ namespace iohome
               deviceIt->second.next_status_update_timestamp = esp_timer_get_time() + std::max(static_cast<int64_t>(statusFrame.data[10]) * 1000000, STATUS_UPDATE_MANUAL_MARGIN_US);
             }
             else
-              deviceIt->second.next_status_update_timestamp = esp_timer_get_time() + STATUS_UPDATE_AUTO_MARGIN_US;
+            {
+              // No automatic update and no estimate: if the device itself reports it is moving, poll again shortly
+              // until it has stopped, otherwise the final position (e.g. after a move started by a remote) is only
+              // seen after 60 s. Keep the long interval when we only assume movement (unknown target/position).
+              const bool reportedMoving = !(statusFrame.data[0] & CMD_PARAM_STATUS_STOPPED);
+              deviceIt->second.next_status_update_timestamp = esp_timer_get_time() +
+                  (reportedMoving ? STATUS_UPDATE_WHILE_MOVING_US : STATUS_UPDATE_AUTO_MARGIN_US);
+            }
           }
         }
         if (!xQueueSendToBack(sIoDeviceStatusQueue, &deviceIt->second, 0))
