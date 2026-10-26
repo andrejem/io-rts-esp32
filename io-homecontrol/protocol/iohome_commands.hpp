@@ -49,6 +49,15 @@ namespace iohome
     /// @return true on success
     bool create_getstatus03_tilt_request(IoFrame &frame, const uint8_t *own_node_id, const uint8_t *dst_node_id, bool is_low_power);
 
+    /// @brief Create a GetStatus IO Frame (0x03) with tilt info request, 03 20 00 00 variant
+    /// Some devices (e.g. Somfy J406 io) answer the 03 20 01 00 request with the "my" marker (0xD8)
+    /// instead of a tilt value while they are at their "my" position; this variant still returns the tilt.
+    /// @param frame Output IoFrame structure
+    /// @param own_node_id Source node ID (3 bytes)
+    /// @param dst_node_id Destination node ID (3 bytes) for output frame to create
+    /// @return true on success
+    bool create_getstatus03_current_tilt_request(IoFrame &frame, const uint8_t *own_node_id, const uint8_t *dst_node_id, bool is_low_power);
+
     /// @brief Create a Discovery IO Frame (0x28)
     /// @param frame Output IoFrame structure
     /// @param own_node_id Source node ID (3 bytes)
