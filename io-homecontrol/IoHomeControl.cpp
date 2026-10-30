@@ -54,6 +54,7 @@ constexpr int64_t STATUS_UPDATE_BACKOFF_3_US = 1'800'000'000LL;  // 30 min (3 co
 constexpr int64_t STATUS_UPDATE_AFTER_REMOTE_US = 2000000;  // 2 seconds after detection of a frame sent by a remote
 constexpr int64_t STATUS_UPDATE_AFTER_TILT_US = 4000000;    // 4 seconds after a tilt command, to read back the new tilt
 constexpr int64_t STATUS_UPDATE_WHILE_MOVING_US = 3000000;  // 3 seconds between polls of a moving device that gives no time estimate
+constexpr int64_t STATUS_UPDATE_AFTER_FAVORITE_US = 4000000; // 4 seconds after a favorite ("my") command, to read back the new state
 constexpr int64_t STATUS_POLL_HOLD_MAX_US = 60'000'000LL;   // HoldStatusPolls() stops deferring polls after 60 s
 
 constexpr size_t LOG_MESSAGE_MAXSIZE = 256;
@@ -1674,6 +1675,13 @@ namespace iohome
       if (create_execute_request(request, mOwnNodeId, it->second.info.node_id, it->second.info.is_low_power, position, quiet, favoriteWithTilt) && SendAndReceive(request, response, FREQUENCY_CHANNEL_2))
       {
         UpdateDeviceStatus(response);
+        if (position == CMD_PARAM_POSITION_FAVORITE)
+        {
+          // The response to a favorite command carries markers instead of position and tilt, reports the
+          // device as stopped and gives no travel time, so the next poll would only come after an hour.
+          // Read the status back shortly; while the device moves, the regular follow-up polls take over.
+          it->second.next_status_update_timestamp = esp_timer_get_time() + STATUS_UPDATE_AFTER_FAVORITE_US;
+        }
         ret = true;
       }
       else
