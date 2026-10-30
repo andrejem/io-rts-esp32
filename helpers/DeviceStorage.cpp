@@ -67,6 +67,10 @@ namespace Helpers
         cJSON_AddBoolToObject(obj, "is_low_power",        dev.info.is_low_power);
         cJSON_AddNumberToObject(obj, "transit_ms", sd.transit_time_ms);
         cJSON_AddBoolToObject(obj, "quiet", sd.quiet);
+        if (dev.my_position >= 0.0f)
+            cJSON_AddNumberToObject(obj, "my_position", dev.my_position);
+        if (dev.my_tilt >= 0.0f)
+            cJSON_AddNumberToObject(obj, "my_tilt", dev.my_tilt);
         if (!sd.local_name.empty())
             cJSON_AddStringToObject(obj, "local_name", sd.local_name.c_str());
 
@@ -152,6 +156,11 @@ namespace Helpers
 
         cJSON *quietItem = cJSON_GetObjectItem(obj, "quiet");
         sd.quiet = cJSON_IsBool(quietItem) ? cJSON_IsTrue(quietItem) : false;
+
+        cJSON *myPosItem = cJSON_GetObjectItem(obj, "my_position");
+        dev.my_position = cJSON_IsNumber(myPosItem) ? (float)myPosItem->valuedouble : -1.0f;
+        cJSON *myTiltItem = cJSON_GetObjectItem(obj, "my_tilt");
+        dev.my_tilt = cJSON_IsNumber(myTiltItem) ? (float)myTiltItem->valuedouble : -1.0f;
 
         cJSON *localNameItem = cJSON_GetObjectItem(obj, "local_name");
         sd.local_name = (cJSON_IsString(localNameItem) && localNameItem->valuestring[0]) ? localNameItem->valuestring : "";

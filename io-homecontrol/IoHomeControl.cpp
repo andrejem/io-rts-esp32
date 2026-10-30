@@ -1007,6 +1007,8 @@ namespace iohome
     {
       IoDevice device;
       memset(&device, 0, sizeof(IoDevice));
+      device.my_position = -1.0f; // no favorite position configured
+      device.my_tilt = -1.0f;
       device.is_stopped = true;
       device.is_deleted = false;
       device.position = UNKNOWN_POSITION;
@@ -1899,6 +1901,24 @@ namespace iohome
     return true;
   }
 
+  bool IoHomeControl::SetDeviceFavoriteState(const std::string &deviceID, float position, float tilt)
+  {
+    if (xSemaphoreTake(sMutex, MUTEX_MAX_WAIT_TICKS))
+    {
+      auto it = sDeviceMap.find(deviceID);
+      bool found = it != sDeviceMap.end();
+      if (found)
+      {
+        it->second.my_position = position;
+        it->second.my_tilt = tilt;
+      }
+      xSemaphoreGive(sMutex);
+      return found;
+    }
+    IO_LOGE("SetDeviceFavoriteState: failed to take mutex!");
+    return false;
+  }
+
   bool IoHomeControl::isDeviceOpenCloseOnly(const std::string &deviceID)
   {
     if (!mInitialized || !mReceiving || mPassiveMode)
@@ -2303,6 +2323,30 @@ namespace iohome
     }
   }
 
+  /// @brief true if a raw position or tilt value is the favorite ("my") marker 0xD8xx
+  static bool isFavoriteMarker(uint16_t raw)
+  {
+    return raw > CMD_PARAM_STATUS_POS_MAX && (raw >> 8) == CMD_PARAM_POSITION_FAVORITE;
+  }
+
+  /// @brief Some devices (e.g. Somfy J406 io) report the favorite marker instead of a value while they are at their
+  /// favorite position. Replace it with the favorite position configured for the device, if any.
+  /// @param raw raw height value (0 = open, CMD_PARAM_STATUS_POS_MAX = closed) or marker
+  static uint16_t resolveFavoriteHeight(uint16_t raw, const IoDevice &device)
+  {
+    if (isFavoriteMarker(raw) && device.my_position >= 0.0f && device.my_position <= 100.0f)
+      return (uint16_t)(device.my_position * CMD_PARAM_STATUS_POS_MAX / 100.0f);
+    return raw;
+  }
+
+  /// @brief Same as resolveFavoriteHeight() for the tilt (raw value counts closed, my_tilt counts open)
+  static uint16_t resolveFavoriteTilt(uint16_t raw, const IoDevice &device)
+  {
+    if (isFavoriteMarker(raw) && device.my_tilt >= 0.0f && device.my_tilt <= 100.0f)
+      return (uint16_t)((100.0f - device.my_tilt) * CMD_PARAM_STATUS_POS_MAX / 100.0f);
+    return raw;
+  }
+
   /// @brief true if a raw target value is a marker that leaves the height unchanged (D2 stop, D4 keep/ignore)
   static bool isHeightKeepingMarker(uint16_t rawTarget)
   {
@@ -2399,8 +2443,8 @@ namespace iohome
 
         // [0] status, [1] flags, [2-3] target position or marker (D2=stop, D4=do nothing),
         // [4-5] current position, [6-7] timer/unknown, [8-10] originator, [11] 01
-        uint16_t tmpTargetPos = statusFrame.data[2] << 8 | statusFrame.data[3];
-        uint16_t tmpCurrentPos = statusFrame.data[4] << 8 | statusFrame.data[5];
+        uint16_t tmpTargetPos = resolveFavoriteHeight(statusFrame.data[2] << 8 | statusFrame.data[3], deviceIt->second);
+        uint16_t tmpCurrentPos = resolveFavoriteHeight(statusFrame.data[4] << 8 | statusFrame.data[5], deviceIt->second);
         // D2 (stop) and D4 (keep position, e.g. tilt-only command) do not change the height
         const bool heightUnchanged = isHeightKeepingMarker(tmpTargetPos);
         if (tmpTargetPos <= CMD_PARAM_STATUS_POS_MAX)
@@ -2437,7 +2481,7 @@ namespace iohome
           if (statusFrame.data_len >= 16)
           {
             // 16-byte tilt-extended response: tilt at [13-14]
-            uint16_t tmpTiltClosed = statusFrame.data[13] << 8 | statusFrame.data[14];
+            uint16_t tmpTiltClosed = resolveFavoriteTilt(statusFrame.data[13] << 8 | statusFrame.data[14], deviceIt->second);
             if (tmpTiltClosed <= CMD_PARAM_STATUS_POS_MAX)
               deviceIt->second.tilt = 100.0 - (tmpTiltClosed * 100.0 / CMD_PARAM_STATUS_POS_MAX);
             else
@@ -2497,8 +2541,8 @@ namespace iohome
         deviceIt->second.last_status_timestamp = esp_timer_get_time();
         if (deviceIt->second.is_stopped)
           deviceIt->second.move_start_us = 0; // movement complete, stop interpolation
-        uint16_t tmpTargetPos = statusFrame.data[5] << 8 | statusFrame.data[6];
-        uint16_t tmpCurrentPos = statusFrame.data[7] << 8 | statusFrame.data[8];
+        uint16_t tmpTargetPos = resolveFavoriteHeight(statusFrame.data[5] << 8 | statusFrame.data[6], deviceIt->second);
+        uint16_t tmpCurrentPos = resolveFavoriteHeight(statusFrame.data[7] << 8 | statusFrame.data[8], deviceIt->second);
         // D2 (stop) and D4 (keep position, e.g. tilt-only command) do not change the height
         const bool heightUnchanged = isHeightKeepingMarker(tmpTargetPos);
         if (tmpTargetPos <= CMD_PARAM_STATUS_POS_MAX)

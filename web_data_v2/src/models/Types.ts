@@ -91,6 +91,8 @@ export interface Device {
   is_quiet: boolean;
   tilt_supported: boolean;
   transit_time_ms: number;
+  my_position?: number;
+  my_tilt?: number;
   protocol: string;
   position_estimated: boolean;
 }

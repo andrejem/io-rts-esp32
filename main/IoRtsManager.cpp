@@ -626,6 +626,38 @@ namespace IoRts
         return err == ESP_OK;
     }
 
+    bool IoRtsManager::SetFavoriteState(const std::string &deviceID, float position, float tilt)
+    {
+        if (position < 0.0f || position > 100.0f) position = -1.0f;
+        if (tilt < 0.0f || tilt > 100.0f) tilt = -1.0f;
+        mIoDevicesMutex.lock();
+        auto it = mIoDevices.find(deviceID);
+        bool found = it != mIoDevices.end();
+        if (found)
+        {
+            it->second.my_position = position;
+            it->second.my_tilt = tilt;
+        }
+        mIoDevicesMutex.unlock();
+
+        if (!found)
+            return false;
+
+        mIoHome->SetDeviceFavoriteState(deviceID, position, tilt);
+
+        Helpers::StoredIoDevice stored;
+        if (Helpers::DeviceStorage::LoadIoDevice(deviceID, stored) != ESP_OK)
+            return false;
+        stored.device.my_position = position;
+        stored.device.my_tilt = tilt;
+        esp_err_t err = Helpers::DeviceStorage::SaveIoDevice(deviceID, stored);
+        if (err == ESP_OK)
+            ESP_LOGI(TAG, "Favorite position for %s set to height %.0f%%, tilt %.0f%%", deviceID.c_str(), position, tilt);
+        // Read the status again, so a device standing at its favorite position shows the new values right away
+        mIoHome->ForceDeviceStatusUpdate(deviceID);
+        return err == ESP_OK;
+    }
+
     bool IoRtsManager::SetQuiet(const std::string &deviceID, bool quiet)
     {
         mIoDevicesMutex.lock();

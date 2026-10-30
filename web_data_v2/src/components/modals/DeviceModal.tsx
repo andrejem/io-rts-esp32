@@ -12,6 +12,7 @@ import { ResetPositionRow } from "../deviceSettings/ResetPositionRow.tsx";
 import { BrandRow } from "../deviceSettings/BrandRow.tsx";
 import { PairingModeRow } from "../deviceSettings/PairingModeRow.tsx";
 import { FavoritePositionRow } from "../deviceSettings/FavoritePositionRow.tsx";
+import { MyStateRow } from "../deviceSettings/MyStateRow.tsx";
 import { DangerZone } from "../deviceSettings/DangerZone.tsx";
 
 interface DeviceModalProps {
@@ -84,6 +85,7 @@ export function DeviceModal({ device, onClose }: DeviceModalProps) {
             device={deviceState}
             setDeviceState={setDeviceState}
           />
+          <MyStateRow device={deviceState} setDeviceState={setDeviceState} />
           <DangerZone
             device={deviceState}
             setDeviceState={setDeviceState}

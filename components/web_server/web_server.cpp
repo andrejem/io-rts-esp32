@@ -498,6 +498,8 @@ static esp_err_t api_devices_get(httpd_req_t *req)
             iohome::deviceTypeSupportsTilt(dev.info.device_type));
 
         cJSON_AddNumberToObject(obj, "transit_time_ms", dev.transit_time_ms);
+        cJSON_AddNumberToObject(obj, "my_position", dev.my_position);
+        cJSON_AddNumberToObject(obj, "my_tilt", dev.my_tilt);
         cJSON_AddStringToObject(obj, "protocol", is1w ? "1w" : "2w");
         cJSON_AddBoolToObject(obj, "position_estimated", is1w);
 
@@ -810,6 +812,13 @@ static esp_err_t api_action_post(httpd_req_t *req)
         if (strlen(deviceId) > 0 && value >= 0 && value <= 300) {
             ok = s_manager->SetTransitTime(deviceId, (uint32_t)(value * 1000));
         }
+    } else if (strcmp(action, "setFavoriteState") == 0) {
+        // value = height in % closed, tilt = tilt in % open; -1 (or missing) = not set
+        cJSON *jTilt = cJSON_GetObjectItem(json, "tilt");
+        float myPos  = cJSON_IsNumber(jValue) ? (float)jValue->valuedouble : -1.0f;
+        float myTilt = cJSON_IsNumber(jTilt)  ? (float)jTilt->valuedouble  : -1.0f;
+        if (strlen(deviceId) > 0)
+            ok = s_manager->SetFavoriteState(deviceId, myPos, myTilt);
     } else if (strcmp(action, "calibrate") == 0) {
         if (strlen(deviceId) > 0 && s_cal_device_id[0] == '\0') {
             auto *arg = new CalibrationArg();
@@ -2256,6 +2265,12 @@ static bool json_to_stored_device(cJSON *item, std::string &deviceID, Helpers::S
     dev.target   = iohome::UNKNOWN_POSITION;
     dev.tilt     = iohome::UNKNOWN_POSITION;
     dev.is_stopped = true;
+    {
+        cJSON *myPosItem  = cJSON_GetObjectItem(item, "my_position");
+        cJSON *myTiltItem = cJSON_GetObjectItem(item, "my_tilt");
+        dev.my_position = cJSON_IsNumber(myPosItem)  ? (float)myPosItem->valuedouble  : -1.0f;
+        dev.my_tilt     = cJSON_IsNumber(myTiltItem) ? (float)myTiltItem->valuedouble : -1.0f;
+    }
 
     cJSON *nameItem = cJSON_GetObjectItem(item, "name");
     if (cJSON_IsString(nameItem))

@@ -68,6 +68,13 @@ namespace IoRts
         /// @param transit_time_ms Transit time in milliseconds (0 = uncalibrated)
         /// @return true on success
         bool SetTransitTime(const std::string &deviceID, uint32_t transit_time_ms);
+
+        /// @brief Set the favorite ("my") position of a 2W device and persist it. Used when the device reports the
+        /// favorite marker instead of a value while it is at its favorite position (e.g. Somfy J406 io).
+        /// @param deviceID Device ID
+        /// @param position Height in % closed (0-100), -1 = not set
+        /// @param tilt Tilt in % open (0-100), -1 = not set
+        bool SetFavoriteState(const std::string &deviceID, float position, float tilt);
         bool SetLocalName(const std::string &deviceID, const std::string &name);
 
         /// @brief Set quiet mode for a device (persists to storage)

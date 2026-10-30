@@ -44,6 +44,8 @@ namespace iohome
         uint32_t transit_time_ms = 0;         // Time to travel full range in ms (0 = uncalibrated)
         bool quiet = false;                   // Slower, quieter motor operation
         char local_name[64];                  // User-defined display name; overrides info.name if non-empty
+        float my_position = -1.0f;            // Height of the favorite ("my") position in % closed, -1 = not set
+        float my_tilt = -1.0f;                // Tilt of the favorite position in % open, -1 = not set
         // Transient movement-tracking fields (not persisted, zero at boot)
         int64_t move_start_us  = 0;           // esp_timer_get_time() when the last position command was sent (0 = no active movement)
         float   move_start_pos = 0.0f;        // Position at the time the command was sent

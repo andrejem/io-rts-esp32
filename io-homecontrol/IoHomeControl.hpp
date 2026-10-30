@@ -245,6 +245,14 @@ namespace iohome
     /// @return true on success, false on error
     bool ForceDeviceStatusUpdate(const std::string &deviceID);
 
+    /// @brief Set the favorite ("my") position of a device, used when the device reports the favorite marker
+    /// instead of its position or tilt
+    /// @param deviceID Device ID (6 characters as hex representation of the 3 bytes, eg "112233")
+    /// @param position Height in % closed (0-100), -1 = not set
+    /// @param tilt Tilt in % open (0-100), -1 = not set
+    /// @return true on success, false if the device is unknown
+    bool SetDeviceFavoriteState(const std::string &deviceID, float position, float tilt);
+
     /// @brief Depending on device information (type, subtype), says if only Open/Close (or On/Off) only.
     /// @param deviceID
     /// @return true if only Open/Close, false if Stop/SetPosition also available.
