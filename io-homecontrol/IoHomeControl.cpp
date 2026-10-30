@@ -55,8 +55,6 @@ constexpr int64_t STATUS_UPDATE_AFTER_REMOTE_US = 2000000;  // 2 seconds after d
 constexpr int64_t STATUS_UPDATE_AFTER_TILT_US = 4000000;    // 4 seconds after a tilt command, to read back the new tilt
 constexpr int64_t STATUS_UPDATE_WHILE_MOVING_US = 3000000;  // 3 seconds between polls of a moving device that gives no time estimate
 constexpr int64_t STATUS_UPDATE_AFTER_FAVORITE_US = 4000000; // 4 seconds after a favorite ("my") command, to read back the new state
-constexpr int64_t STATUS_UPDATE_FAVORITE_TILT_RETRY_US = 5000000; // 5 seconds between tilt read-backs while a "my" tilt is still a marker
-constexpr uint8_t FAVORITE_TILT_RETRIES = 3;                // read-backs after a "my" command while the tilt is still a marker
 constexpr int64_t STATUS_POLL_HOLD_MAX_US = 60'000'000LL;   // HoldStatusPolls() stops deferring polls after 60 s
 
 constexpr size_t LOG_MESSAGE_MAXSIZE = 256;
@@ -967,19 +965,6 @@ namespace iohome
                     vTaskPrioritySet(NULL, currentPriority);
                     if (tiltOk)
                       UpdateDeviceStatus(tiltResponse);
-                    // Right after a "my" command some devices (e.g. Somfy J406 io) still answer both variants
-                    // with the marker for a few seconds: read back again shortly instead of waiting for the next poll
-                    const bool stillMarker = !tiltOk || tiltResponse.data_len < 16 ||
-                        (uint16_t)(tiltResponse.data[13] << 8 | tiltResponse.data[14]) > CMD_PARAM_STATUS_POS_MAX;
-                    if (stillMarker && dev->second.favorite_tilt_retries > 0)
-                    {
-                      dev->second.favorite_tilt_retries--;
-                      dev->second.next_status_update_timestamp = esp_timer_get_time() + STATUS_UPDATE_FAVORITE_TILT_RETRY_US;
-                      IO_LOGI("UpdateDevicesStatusTask: {} tilt still a marker after 'my', reading again ({} left)",
-                              devId, (int)dev->second.favorite_tilt_retries);
-                    }
-                    else if (!stillMarker)
-                      dev->second.favorite_tilt_retries = 0;
                   }
                 }
                 else
@@ -1696,7 +1681,6 @@ namespace iohome
           // device as stopped and gives no travel time, so the next poll would only come after an hour.
           // Read the status back shortly; while the device moves, the regular follow-up polls take over.
           it->second.next_status_update_timestamp = esp_timer_get_time() + STATUS_UPDATE_AFTER_FAVORITE_US;
-          it->second.favorite_tilt_retries = FAVORITE_TILT_RETRIES;
         }
         ret = true;
       }

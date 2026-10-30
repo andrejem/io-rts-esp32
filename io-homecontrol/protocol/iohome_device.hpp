@@ -50,7 +50,6 @@ namespace iohome
         float   move_target_pos = 0.0f;       // Commanded target position
         // Transient poll state (not serialised, resets on reboot)
         uint8_t consecutive_poll_failures = 0; // increments on SendAndReceive failure, resets on success
-        uint8_t favorite_tilt_retries = 0;     // read-backs left after a favorite command while the tilt is still a marker
     };
 
     /// @brief Check if a device type supports tilt control
